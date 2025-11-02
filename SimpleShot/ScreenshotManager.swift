@@ -246,10 +246,11 @@ enum ScreenshotType {
 // MARK: - 截图项
 struct ScreenshotItem: Identifiable {
     let id = UUID()
-    let image: NSImage
+    var image: NSImage
     let type: ScreenshotType
     let timestamp: Date
     var fileURL: URL?
+    var annotatedImage: NSImage?  // 标注后的图片
     
     init(image: NSImage, type: ScreenshotType) {
         self.image = image

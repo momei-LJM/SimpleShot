@@ -299,15 +299,16 @@ struct HistoryView: View {
 
 // MARK: - 缩略图视图
 struct ScreenshotThumbnail: View {
-    let item: ScreenshotItem
+    @State var item: ScreenshotItem
     let onDelete: () -> Void
     @State private var isHovered = false
+    @State private var showAnnotationEditor = false
     
     private let primaryColor = Color(red: 0.2, green: 0.5, blue: 1.0)
     
     var body: some View {
         VStack(spacing: 8) {
-            Image(nsImage: item.image)
+            Image(nsImage: item.annotatedImage ?? item.image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 150, height: 110)
@@ -318,12 +319,30 @@ struct ScreenshotThumbnail: View {
                         .stroke(isHovered ? primaryColor.opacity(0.5) : Color.gray.opacity(0.2), lineWidth: isHovered ? 2 : 1)
                 )
                 .shadow(color: isHovered ? primaryColor.opacity(0.2) : Color.black.opacity(0.1), radius: isHovered ? 8 : 4, x: 0, y: 2)
+                .onTapGesture {
+                    if isHovered {
+                        showAnnotationEditor = true
+                    }
+                }
             
             HStack(spacing: 8) {
                 Text(item.timestamp, style: .time)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer()
+                
+                // 标注按钮
+                Button(action: { showAnnotationEditor = true }) {
+                    Image(systemName: "pencil.tip.crop.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(primaryColor)
+                        .padding(6)
+                        .background(primaryColor.opacity(0.1))
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1 : 0.7)
+                
                 Button(action: onDelete) {
                     Image(systemName: "trash.fill")
                         .font(.system(size: 11, weight: .medium))
@@ -344,6 +363,21 @@ struct ScreenshotThumbnail: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering
             }
+        }
+        .onChange(of: showAnnotationEditor) { newValue in
+            if newValue {
+                openAnnotationEditor(item: &item, isPresented: &showAnnotationEditor)
+            }
+        }
+    }
+    
+    private func openAnnotationEditor(item: inout ScreenshotItem, isPresented: inout Bool) {
+        let image = item.annotatedImage ?? item.image
+        AnnotationEditorWindow.show(with: image) { annotatedImage in
+            item.annotatedImage = annotatedImage
+            isPresented = false
+        } onCancel: {
+            isPresented = false
         }
     }
 }
