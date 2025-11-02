@@ -35,8 +35,15 @@ class ScreenshotManager: ObservableObject {
                 
                 let filter = SCContentFilter(display: display, excludingWindows: [])
                 let config = SCStreamConfiguration()
-                config.width = Int(display.width)
-                config.height = Int(display.height)
+                
+                // 获取屏幕的实际像素分辨率（考虑 Retina 屏幕的缩放因子）
+                let screen = NSScreen.main
+                let backingScaleFactor = screen?.backingScaleFactor ?? 2.0
+                config.width = Int(CGFloat(display.width) * backingScaleFactor)
+                config.height = Int(CGFloat(display.height) * backingScaleFactor)
+                
+                // 禁用缩放以保持原生分辨率
+                config.scalesToFit = false
                 
                 let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
                 let nsImage = NSImage(cgImage: image, size: NSSize(width: display.width, height: display.height))
@@ -71,41 +78,40 @@ class ScreenshotManager: ObservableObject {
                 print("📺 Display info - width: \(display.width), height: \(display.height)")
                 print("📺 Screen info - frame: \(screen.frame), scale: \(screen.backingScaleFactor)")
                 
-                // 获取全屏截图
+                // 获取全屏截图 - 使用高分辨率（考虑 Retina 屏幕）
                 let filter = SCContentFilter(display: display, excludingWindows: [])
                 let config = SCStreamConfiguration()
-                config.width = Int(display.width)
-                config.height = Int(display.height)
+                let backingScaleFactor = screen.backingScaleFactor
+                config.width = Int(CGFloat(display.width) * backingScaleFactor)
+                config.height = Int(CGFloat(display.height) * backingScaleFactor)
+                config.scalesToFit = false
                 
-                print("⏳ 开始截图...")
+                print("⏳ 开始截图... (分辨率: \(config.width) x \(config.height))")
                 let fullImage = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
                 print("✅ 全屏截图完成 - 尺寸: \(fullImage.width) x \(fullImage.height)")
                 
-                // 关键发现：Display 的 width/height 是逻辑像素，不是物理像素
-                // ScreenCaptureKit 返回的图片尺寸就是逻辑像素尺寸
-                // 所以 rect 可以直接用于裁剪，不需要乘以 scale！
-                
-                let captureRect = CGRect(
-                    x: rect.origin.x,
-                    y: rect.origin.y,
-                    width: rect.width,
-                    height: rect.height
+                // 需要按照高分辨率调整裁剪区域坐标
+                let scaledRect = CGRect(
+                    x: rect.origin.x * backingScaleFactor,
+                    y: rect.origin.y * backingScaleFactor,
+                    width: rect.width * backingScaleFactor,
+                    height: rect.height * backingScaleFactor
                 )
                 
                 print("📐 裁剪区域计算:")
                 print("   输入 rect: \(rect)")
-                print("   裁剪坐标 (逻辑像素): \(captureRect)")
+                print("   缩放后 rect: \(scaledRect)")
                 print("   图片总尺寸: \(fullImage.width) x \(fullImage.height)")
                 
                 // 验证坐标是否在范围内
-                if captureRect.maxX > CGFloat(fullImage.width) || captureRect.maxY > CGFloat(fullImage.height) {
+                if scaledRect.maxX > CGFloat(fullImage.width) || scaledRect.maxY > CGFloat(fullImage.height) {
                     print("⚠️  警告：裁剪区域超出图片范围！")
-                    print("   captureRect: \(captureRect)")
+                    print("   scaledRect: \(scaledRect)")
                     print("   图片尺寸: \(fullImage.width) x \(fullImage.height)")
                 }
                 
-                guard let croppedImage = fullImage.cropping(to: captureRect) else {
-                    print("❌ 区域裁剪失败 - captureRect: \(captureRect)")
+                guard let croppedImage = fullImage.cropping(to: scaledRect) else {
+                    print("❌ 区域裁剪失败 - scaledRect: \(scaledRect)")
                     return
                 }
                 
@@ -171,19 +177,24 @@ class ScreenshotManager: ObservableObject {
         let filename = "Screenshot_\(dateFormatter.string(from: item.timestamp)).png"
         let fileURL = screenshotsFolder.appendingPathComponent(filename)
         
-        // 转换为 PNG 数据
+        // 转换为 PNG 数据 - 使用最高质量
         if let tiffData = image.tiffRepresentation,
-           let bitmapImage = NSBitmapImageRep(data: tiffData),
-           let pngData = bitmapImage.representation(using: .png, properties: [:]) {
-            try? pngData.write(to: fileURL)
-            
-            DispatchQueue.main.async {
-                if let index = self.screenshots.firstIndex(where: { $0.id == item.id }) {
-                    self.screenshots[index].fileURL = fileURL
+           let bitmapImage = NSBitmapImageRep(data: tiffData) {
+            // PNG 保存属性：不压缩（最高质量）
+            let pngProperties: [NSBitmapImageRep.PropertyKey: Any] = [
+                .compressionFactor: 1.0  // 无损压缩（范围 0.0-1.0，1.0 为最高质量）
+            ]
+            if let pngData = bitmapImage.representation(using: .png, properties: pngProperties) {
+                try? pngData.write(to: fileURL)
+                
+                DispatchQueue.main.async {
+                    if let index = self.screenshots.firstIndex(where: { $0.id == item.id }) {
+                        self.screenshots[index].fileURL = fileURL
+                    }
                 }
+                
+                print("截图已保存至: \(fileURL.path)")
             }
-            
-            print("截图已保存至: \(fileURL.path)")
         }
     }
     
@@ -223,6 +234,56 @@ class ScreenshotManager: ObservableObject {
             try? FileManager.default.removeItem(at: fileURL)
         }
         screenshots.removeAll { $0.id == item.id }
+    }
+    
+    // MARK: - 保存标注后的图像
+    func saveAnnotatedImage(_ annotatedImage: NSImage, for itemID: UUID) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self,
+                  let index = self.screenshots.firstIndex(where: { $0.id == itemID }) else { return }
+            
+            let item = self.screenshots[index]
+            self.screenshots[index].annotatedImage = annotatedImage
+            
+            // 异步保存标注后的图像到文件
+            Task {
+                self.saveAnnotatedToFile(annotatedImage, item: item)
+            }
+        }
+    }
+    
+    private func saveAnnotatedToFile(_ image: NSImage, item: ScreenshotItem) {
+        let fileManager = FileManager.default
+        let picturesURL = fileManager.urls(for: .picturesDirectory, in: .userDomainMask).first!
+        let screenshotsFolder = picturesURL.appendingPathComponent("SimpleShot")
+        let annotatedFolder = screenshotsFolder.appendingPathComponent("Annotated")
+        
+        // 创建文件夹
+        if !fileManager.fileExists(atPath: annotatedFolder.path) {
+            try? fileManager.createDirectory(at: annotatedFolder, withIntermediateDirectories: true)
+        }
+        
+        // 生成文件名（使用原始截图的时间戳）
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let filename = "Screenshot_\(dateFormatter.string(from: item.timestamp))_annotated.png"
+        let fileURL = annotatedFolder.appendingPathComponent(filename)
+        
+        // 转换为 PNG 数据 - 使用最高质量
+        if let tiffData = image.tiffRepresentation,
+           let bitmapImage = NSBitmapImageRep(data: tiffData) {
+            // PNG 保存属性：最高质量
+            let pngProperties: [NSBitmapImageRep.PropertyKey: Any] = [
+                .compressionFactor: 1.0  // 无损压缩（最高质量）
+            ]
+            if let pngData = bitmapImage.representation(using: .png, properties: pngProperties) {
+                try? pngData.write(to: fileURL)
+                print("✅ 标注图像已保存至: \(fileURL.path)")
+                
+                // 同时复制到剪切板
+                copyToClipboard(image)
+            }
+        }
     }
     
     // MARK: - 清除所有截图

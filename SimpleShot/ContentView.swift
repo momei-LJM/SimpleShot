@@ -303,6 +303,7 @@ struct ScreenshotThumbnail: View {
     let onDelete: () -> Void
     @State private var isHovered = false
     @State private var showAnnotationEditor = false
+    @ObservedObject private var screenshotManager = ScreenshotManager.shared
     
     private let primaryColor = Color(red: 0.2, green: 0.5, blue: 1.0)
     
@@ -366,18 +367,19 @@ struct ScreenshotThumbnail: View {
         }
         .onChange(of: showAnnotationEditor) { newValue in
             if newValue {
-                openAnnotationEditor(item: &item, isPresented: &showAnnotationEditor)
+                let image = item.annotatedImage ?? item.image
+                AnnotationEditorWindow.show(with: image) { annotatedImage in
+                    // 保存标注后的图像
+                    DispatchQueue.main.async {
+                        item.annotatedImage = annotatedImage
+                        showAnnotationEditor = false
+                        // 保存到文件
+                        screenshotManager.saveAnnotatedImage(annotatedImage, for: item.id)
+                    }
+                } onCancel: {
+                    showAnnotationEditor = false
+                }
             }
-        }
-    }
-    
-    private func openAnnotationEditor(item: inout ScreenshotItem, isPresented: inout Bool) {
-        let image = item.annotatedImage ?? item.image
-        AnnotationEditorWindow.show(with: image) { annotatedImage in
-            item.annotatedImage = annotatedImage
-            isPresented = false
-        } onCancel: {
-            isPresented = false
         }
     }
 }

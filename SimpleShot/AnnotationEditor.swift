@@ -24,7 +24,7 @@ struct AnnotationElement: Identifiable {
     var startPoint: CGPoint
     var endPoint: CGPoint
     var color: NSColor = NSColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0)
-    var lineWidth: CGFloat = 2.0
+    var lineWidth: CGFloat = 3.0  // 增加到 3.0 以获得更清晰的线条
     
     enum AnnotationType {
         case rectangle
@@ -309,6 +309,10 @@ class AnnotationCanvasView: NSView {
         
         resultImage.lockFocus()
         
+        // 设置高质量绘制
+        NSGraphicsContext.current?.shouldAntialias = true
+        NSGraphicsContext.current?.imageInterpolation = .high
+        
         // 绘制原始图片
         image.draw(at: NSPoint.zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
         
@@ -443,7 +447,7 @@ class AnnotationCanvasView: NSView {
         
         let tool = annotation?.type ?? toolTypeToElementType(currentTool)
         let color = annotation?.color ?? primaryColor
-        let lineWidth = annotation?.lineWidth ?? 2.0
+        let lineWidth = annotation?.lineWidth ?? 3.0
         
         context.setLineWidth(lineWidth)
         context.setStrokeColor(color.cgColor)
