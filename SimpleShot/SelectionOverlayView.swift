@@ -60,7 +60,7 @@ class SelectionOverlayNSView: NSView {
         super.draw(dirtyRect)
         
         // 半透明背景
-        NSColor.black.withAlphaComponent(0.3).setFill()
+        NSColor.black.withAlphaComponent(0.4).setFill()
         dirtyRect.fill()
         
         // 绘制选择框
@@ -76,30 +76,39 @@ class SelectionOverlayNSView: NSView {
             NSColor.clear.setFill()
             rect.fill(using: .copy)
             
-            // 绘制蓝色边框
-            NSColor.systemBlue.setStroke()
+            // 绘制蓝色边框（使用主题色）
+            let primaryColor = NSColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0)
+            primaryColor.setStroke()
             let path = NSBezierPath(rect: rect)
-            path.lineWidth = 2
+            path.lineWidth = 2.5
             path.stroke()
+            
+            // 绘制内部高亮边框
+            let innerPath = NSBezierPath(rect: rect.insetBy(dx: 2, dy: 2))
+            NSColor.white.withAlphaComponent(0.3).setStroke()
+            innerPath.lineWidth = 1
+            innerPath.stroke()
             
             // 绘制尺寸文本
             let sizeText = "\(Int(rect.width)) × \(Int(rect.height))"
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: 12),
+                .font: NSFont.systemFont(ofSize: 13, weight: .medium),
                 .foregroundColor: NSColor.white
             ]
             let textSize = sizeText.size(withAttributes: attributes)
             let textRect = NSRect(
-                x: rect.midX - textSize.width / 2,
-                y: rect.minY - textSize.height - 10,
-                width: textSize.width + 8,
-                height: textSize.height + 4
+                x: rect.midX - textSize.width / 2 - 6,
+                y: rect.minY - textSize.height - 12,
+                width: textSize.width + 12,
+                height: textSize.height + 6
             )
             
-            NSColor.black.withAlphaComponent(0.7).setFill()
-            NSBezierPath(roundedRect: textRect, xRadius: 4, yRadius: 4).fill()
+            // 绘制文本背景（使用主题色）
+            let bgPath = NSBezierPath(roundedRect: textRect, xRadius: 6, yRadius: 6)
+            primaryColor.withAlphaComponent(0.95).setFill()
+            bgPath.fill()
             
-            sizeText.draw(at: NSPoint(x: textRect.minX + 4, y: textRect.minY + 2), withAttributes: attributes)
+            sizeText.draw(at: NSPoint(x: textRect.minX + 6, y: textRect.minY + 3), withAttributes: attributes)
         }
     }
     
