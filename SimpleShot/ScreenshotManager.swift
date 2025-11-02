@@ -17,6 +17,9 @@ class ScreenshotManager: ObservableObject {
     
     static let shared = ScreenshotManager()
     
+    // 截图完成后的回调
+    var onScreenshotCaptured: (() -> Void)?
+    
     private init() {}
     
     // MARK: - 全屏截图
@@ -123,15 +126,32 @@ class ScreenshotManager: ObservableObject {
     func saveScreenshot(_ image: NSImage, type: ScreenshotType) {
         let item = ScreenshotItem(image: image, type: type)
         
-        DispatchQueue.main.async {
-            self.screenshots.insert(item, at: 0)
+        // 确保在主线程执行
+        if Thread.isMainThread {
+            executeOnMainThread(image: image, item: item)
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.executeOnMainThread(image: image, item: item)
+            }
         }
         
-        // 保存到文件
-        saveToFile(image, item: item)
+        // 异步保存到文件
+        Task {
+            saveToFile(image, item: item)
+        }
+    }
+    
+    private func executeOnMainThread(image: NSImage, item: ScreenshotItem) {
+        // 添加到列表
+        self.screenshots.insert(item, at: 0)
         
-        // 复制到剪贴板
+        // 复制到剪贴板（最后执行，确保它是最后的操作）
         copyToClipboard(image)
+        
+        // 延迟触发回调，给剪贴板足够时间稳定
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.onScreenshotCaptured?()
+        }
     }
     
     // MARK: - 保存到文件
@@ -169,23 +189,32 @@ class ScreenshotManager: ObservableObject {
     
     // MARK: - 复制到剪贴板
     private func copyToClipboard(_ image: NSImage) {
-        DispatchQueue.main.async {
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            
-            // 同时写入 TIFF 和 PNG 格式，提高兼容性
-            if let tiffData = image.tiffRepresentation {
-                pasteboard.setData(tiffData, forType: .tiff)
-                
-                // 转换为 PNG
-                if let bitmapImage = NSBitmapImageRep(data: tiffData),
-                   let pngData = bitmapImage.representation(using: .png, properties: [:]) {
-                    pasteboard.setData(pngData, forType: .png)
-                }
-            }
-            
-            print("✅ 截图已复制到剪贴板 (尺寸: \(image.size))")
+        print("🔍 开始复制到剪贴板")
+        
+        let pasteboard = NSPasteboard.general
+        
+        // 声明类型，使用 self 作为 owner 保持所有权
+        pasteboard.declareTypes([.tiff, .png], owner: self)
+        
+        // 立即写入 TIFF 数据
+        if let tiffData = image.tiffRepresentation {
+            pasteboard.setData(tiffData, forType: .tiff)
+            print("✅ TIFF 数据已写入 (\(tiffData.count) bytes)")
+        } else {
+            print("⚠️  无法获取 TIFF 数据")
         }
+        
+        // 立即写入 PNG 数据
+        if let tiffData = image.tiffRepresentation,
+           let bitmapImage = NSBitmapImageRep(data: tiffData),
+           let pngData = bitmapImage.representation(using: .png, properties: [:]) {
+            pasteboard.setData(pngData, forType: .png)
+            print("✅ PNG 数据已写入 (\(pngData.count) bytes)")
+        } else {
+            print("⚠️  无法写入 PNG 数据")
+        }
+        
+        print("✅ 截图已复制到剪贴板")
     }
     
     // MARK: - 删除截图

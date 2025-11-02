@@ -12,6 +12,34 @@ struct ContentView: View {
     @State private var showingHistory = false
     
     var body: some View {
+        if showingHistory {
+            HistoryView(screenshotManager: screenshotManager) {
+                showingHistory = false
+            }
+        } else {
+            MainView(screenshotManager: screenshotManager, showingHistory: $showingHistory)
+        }
+    }
+    
+    init() {
+        // 设置截图完成回调
+        ScreenshotManager.shared.onScreenshotCaptured = {
+            // 延迟1秒后隐藏菜单栏窗口，确保剪贴板数据完全稳定
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                    appDelegate.hideMenuBarWindow()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 主视图
+struct MainView: View {
+    @ObservedObject var screenshotManager: ScreenshotManager
+    @Binding var showingHistory: Bool
+    
+    var body: some View {
         VStack(spacing: 20) {
             // 标题
             HStack {
@@ -134,16 +162,13 @@ struct ContentView: View {
                 .padding(.bottom)
         }
         .frame(width: 400, height: 500)
-        .sheet(isPresented: $showingHistory) {
-            HistoryView(screenshotManager: screenshotManager)
-        }
     }
 }
 
 // MARK: - 历史记录视图
 struct HistoryView: View {
     @ObservedObject var screenshotManager: ScreenshotManager
-    @Environment(\.dismiss) var dismiss
+    let onClose: () -> Void
     
     let columns = [
         GridItem(.adaptive(minimum: 150))
@@ -160,8 +185,8 @@ struct HistoryView: View {
                     screenshotManager.clearAll()
                 }
                 .foregroundColor(.red)
-                Button("关闭") {
-                    dismiss()
+                Button("返回") {
+                    onClose()
                 }
             }
             .padding()

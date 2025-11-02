@@ -13,24 +13,21 @@ struct SimpleShotApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {
-        WindowGroup {
+        MenuBarExtra("SimpleShot", systemImage: "camera.viewfinder") {
             ContentView()
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .commands {
-            CommandGroup(replacing: .newItem) { }
-        }
+        .menuBarExtraStyle(.window)
     }
 }
 
 // MARK: - App Delegate
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
-    var popover: NSPopover?
+    
+    static let shared = AppDelegate()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 防止关闭所有窗口时退出应用
+        // 设置应用为菜单栏应用（当最后一个窗口关闭时不退出）
         NSApplication.shared.setActivationPolicy(.accessory)
         
         // 设置快捷键
@@ -40,7 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 请求屏幕录制权限
         requestScreenRecordingPermission()
         
-        // 创建菜单栏图标
+        // 初始化菜单栏
         setupMenuBar()
     }
     
@@ -75,29 +72,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func setupMenuBar() {
-        // 创建状态栏图标
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "SimpleShot")
-            button.action = #selector(togglePopover)
-            button.target = self
-        }
-        
-        // 创建弹出窗口
-        popover = NSPopover()
-        popover?.contentSize = NSSize(width: 400, height: 500)
-        popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(rootView: ContentView())
+        // MenuBarExtra 已处理状态栏设置
+        // 这个方法现在可以为空或用于其他初始化
     }
     
-    @objc func togglePopover() {
-        if let button = statusItem?.button {
-            if let popover = popover {
-                if popover.isShown {
-                    popover.performClose(nil)
-                } else {
-                    popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    // 隐藏菜单栏窗口
+    func hideMenuBarWindow() {
+        DispatchQueue.main.async {
+            // 再延迟0.1秒确保系统完全接收了剪贴板数据
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // 找到 MenuBarExtra 创建的窗口并隐藏
+                for window in NSApplication.shared.windows {
+                    if window.title == "SimpleShot" {
+                        window.orderOut(nil)
+                        break
+                    }
                 }
             }
         }
