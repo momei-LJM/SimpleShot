@@ -1,0 +1,49 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build SimpleShot",
+			"type": "shell",
+			"command": "xcodebuild -scheme SimpleShot -configuration Debug build",
+			"problemMatcher": [
+				"$xcodebuild"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared"
+			}
+		},
+		{
+			"label": "Run SimpleShot",
+			"type": "shell",
+			"command": "open build/Debug/SimpleShot.app",
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent"
+			}
+		},
+		{
+			"label": "Build and Run",
+			"dependsOn": [
+				"Build SimpleShot",
+				"Run SimpleShot"
+			],
+			"dependsOrder": "sequence",
+			"group": {
+				"kind": "test",
+				"isDefault": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Clean",
+			"type": "shell",
+			"command": "xcodebuild -scheme SimpleShot clean",
+			"problemMatcher": []
+		}
+	]
+}
